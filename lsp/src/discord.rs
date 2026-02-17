@@ -17,14 +17,14 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>
  */
 
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use tokio::sync::{Mutex, MutexGuard};
 
 use discord_rich_presence::{
-    activity::{Activity, Assets, Button, Timestamps},
     DiscordIpc, DiscordIpcClient,
+    activity::{Activity, Assets, Button, Timestamps},
 };
 use tracing::{debug, error, info, instrument, warn};
 
@@ -206,11 +206,12 @@ impl Discord {
         activity_fields: ActivityFields,
         git_remote_url: Option<String>,
     ) -> Result<()> {
-        if let Some((last_fields, last_git)) = &self.last_activity {
-            if last_fields == &activity_fields && last_git == &git_remote_url {
-                debug!("Activity unchanged, skipping update");
-                return Ok(());
-            }
+        if let Some((last_fields, last_git)) = &self.last_activity
+            && last_fields == &activity_fields
+            && last_git == &git_remote_url
+        {
+            debug!("Activity unchanged, skipping update");
+            return Ok(());
         }
 
         let mut client = self.get_client().await?;

@@ -82,13 +82,12 @@ impl Backend {
     }
 
     fn resolve_workspace_path(params: &InitializeParams) -> PathBuf {
-        if let Some(folders) = &params.workspace_folders {
-            if let Some(first_folder) = folders.first() {
-                if let Ok(path) = first_folder.uri.to_file_path() {
-                    debug!("Using workspace folder: {}", path.display());
-                    return path;
-                }
-            }
+        if let Some(folders) = &params.workspace_folders
+            && let Some(first_folder) = folders.first()
+            && let Ok(path) = first_folder.uri.to_file_path()
+        {
+            debug!("Using workspace folder: {}", path.display());
+            return path;
         }
 
         let root_uri = params.root_uri.as_ref().expect(
@@ -107,7 +106,7 @@ impl Backend {
 async fn wait_for_shutdown_signal() {
     #[cfg(unix)]
     {
-        use tokio::signal::unix::{signal, SignalKind};
+        use tokio::signal::unix::{SignalKind, signal};
 
         match signal(SignalKind::terminate()) {
             Ok(mut sigterm) => {
