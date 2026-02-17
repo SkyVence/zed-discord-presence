@@ -21,8 +21,8 @@ use crate::{
     activity::ActivityManager, document::Document, error::Result, idle::IdleManager,
     service::AppState,
 };
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use tracing::{debug, warn};
 
 #[derive(Debug, Clone)]
@@ -158,5 +158,46 @@ impl PresenceService {
             .await;
 
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::service::AppState;
+    use std::sync::Arc;
+
+    #[tokio::test]
+    async fn test_shutdown_suppresses_updates() {
+        let app_state = Arc::new(AppState::new());
+        let service = PresenceService::new(Arc::clone(&app_state));
+
+        // Initial state
+        assert!(!service.is_shutting_down.load(Ordering::SeqCst));
+
+        // Initiate shutdown
+        service.shutdown().await.unwrap();
+        assert!(service.is_shutting_down.load(Ordering::SeqCst));
+
+        // Try to update presence - should return Ok(()) immediately via the guard
+        let result = service.update_presence(None).await;
+        assert!(result.is_ok());
+
+        // Try to reset idle timeout - should return Ok(()) immediately via the guard
+        let result = service.reset_idle_timeout().await;
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_double_shutdown_is_safe() {
+        let app_state = Arc::new(AppState::new());
+        let service = PresenceService::new(Arc::clone(&app_state));
+
+        // First shutdown
+        service.shutdown().await.unwrap();
+
+        // Second shutdown should return Ok(()) via the swap guard
+        let result = service.shutdown().await;
+        assert!(result.is_ok());
     }
 }
