@@ -109,8 +109,25 @@ async fn wait_for_shutdown_signal() {
     {
         use tokio::signal::unix::{SignalKind, signal};
 
-        match signal(SignalKind::terminate()) {
-            Ok(mut sigterm) => {
+        let sigterm = signal(SignalKind::terminate());
+        let sighup = signal(SignalKind::hangup());
+
+        match (sigterm, sighup) {
+            (Ok(mut sigterm), Ok(mut sighup)) => {
+                tokio::select! {
+                    result = tokio::signal::ctrl_c() => {
+                        if let Err(e) = result {
+                            warn!("Failed while waiting for SIGINT: {}", e);
+                        }
+                    }
+                    _ = sigterm.recv() => {}
+                    _ = sighup.recv() => {
+                        info!("Received SIGHUP, parent process likely closed");
+                    }
+                }
+            }
+            (Ok(mut sigterm), Err(e)) => {
+                warn!("Failed to install SIGHUP handler: {}", e);
                 tokio::select! {
                     result = tokio::signal::ctrl_c() => {
                         if let Err(e) = result {
@@ -120,8 +137,22 @@ async fn wait_for_shutdown_signal() {
                     _ = sigterm.recv() => {}
                 }
             }
-            Err(e) => {
+            (Err(e), Ok(mut sighup)) => {
                 warn!("Failed to install SIGTERM handler: {}", e);
+                tokio::select! {
+                    result = tokio::signal::ctrl_c() => {
+                        if let Err(e) = result {
+                            warn!("Failed while waiting for SIGINT: {}", e);
+                        }
+                    }
+                    _ = sighup.recv() => {
+                        info!("Received SIGHUP, parent process likely closed");
+                    }
+                }
+            }
+            (Err(e_term), Err(e_hup)) => {
+                warn!("Failed to install SIGTERM handler: {}", e_term);
+                warn!("Failed to install SIGHUP handler: {}", e_hup);
                 if let Err(err) = tokio::signal::ctrl_c().await {
                     warn!("Failed while waiting for SIGINT fallback: {}", err);
                 }
