@@ -20,6 +20,7 @@
 use std::path::{Path, PathBuf};
 use std::process::exit;
 use std::sync::Arc;
+use std::time::Duration;
 
 use document::Document;
 use git::get_repository_and_remote;
@@ -315,6 +316,9 @@ impl LanguageServer for Backend {
     }
 }
 
+/// Interval in seconds between Discord IPC health checks.
+const DISCORD_HEALTH_CHECK_INTERVAL_SECS: u64 = 30;
+
 #[tokio::main]
 async fn main() {
     logger::init_logger();
@@ -344,6 +348,25 @@ async fn main() {
 
     let app_state_for_backend = Arc::clone(&app_state);
     let presence_service_for_backend = presence_service.clone();
+
+    // Background task: periodically check IPC health and reconnect after sleep/wake cycles.
+    let monitor_service = presence_service.clone();
+    tokio::spawn(async move {
+        let mut interval = tokio::time::interval(Duration::from_secs(
+            DISCORD_HEALTH_CHECK_INTERVAL_SECS,
+        ));
+        interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+        // Skip the first tick so the monitor does not fire immediately on startup.
+        interval.tick().await;
+
+        loop {
+            interval.tick().await;
+            if let Err(e) = monitor_service.reconnect_if_needed().await {
+                warn!("Discord reconnection monitor error: {}", e);
+            }
+        }
+    });
+
     let (service, socket) = LspService::new(move |client| {
         Backend::new(
             client,

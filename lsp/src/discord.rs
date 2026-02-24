@@ -276,6 +276,18 @@ impl Discord {
         Ok(())
     }
 
+    /// Clears the cached last activity, forcing the next `change_activity` call to actually
+    /// send an IPC update even if the activity fields are unchanged. This is used by the
+    /// connection health-check to detect stale sockets after a sleep/wake cycle.
+    pub fn reset_last_activity(&mut self) {
+        self.last_activity = None;
+    }
+
+    /// Returns `true` if there is a cached last activity.
+    pub fn has_last_activity(&self) -> bool {
+        self.last_activity.is_some()
+    }
+
     /// Changes activity with automatic reconnection on failure.
     /// If not connected, attempts to reconnect first.
     /// If activity update fails, marks connection as disconnected for future reconnection.
@@ -364,5 +376,28 @@ mod tests {
         let discord = Discord::new();
         // Timestamp should be non-zero (set to current time)
         assert!(discord.start_timestamp.as_millis() > 0);
+    }
+
+    #[test]
+    fn test_reset_last_activity_clears_cache() {
+        let mut discord = Discord::new();
+        assert!(!discord.has_last_activity());
+
+        // Simulate a cached activity entry by setting it directly (same module, so allowed)
+        discord.last_activity = Some((
+            crate::activity::ActivityFields {
+                state: Some("coding".to_string()),
+                details: Some("in workspace".to_string()),
+                large_image: None,
+                large_text: None,
+                small_image: None,
+                small_text: None,
+            },
+            None,
+        ));
+        assert!(discord.has_last_activity());
+
+        discord.reset_last_activity();
+        assert!(!discord.has_last_activity());
     }
 }
